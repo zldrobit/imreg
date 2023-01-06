@@ -105,6 +105,7 @@ __all__ = (
 import math
 
 import numpy
+import cv2
 
 try:
     import cupy as xp
@@ -192,16 +193,11 @@ def similarity(im0, im1):
     elif angle > 90.0:
         angle -= 180.0
 
-    im2 = ndimage.zoom(im1, 1.0 / scale)
-    im2 = ndimage.rotate(im2, angle)
-
-    if im2.shape < im0.shape:
-        t = xp.zeros_like(im0)
-        t[: im2.shape[0], : im2.shape[1]] = im2
-        im2 = t
-    elif im2.shape > im0.shape:
-        im2 = im2[: im0.shape[0], : im0.shape[1]]
-
+    center = im0.shape[1] // 2, im1.shape[0] // 2
+    R = cv2.getRotationMatrix2D(center, float(angle), 1 / float(scale))
+    im2 = cv2.warpAffine(im1 if isinstance(im1, numpy.ndarray) else im1.get(),
+                         R, (im1.shape[1], im1.shape[0]))
+    im2 = im2 if isinstance(im2, xp.ndarray) else xp.array(im2)
     f0 = fft2(im0)
     f1 = fft2(im2)
     ir = abs(ifft2((f0 * f1.conjugate()) / (abs(f0) * abs(f1))))
@@ -212,16 +208,10 @@ def similarity(im0, im1):
     if t1 > f0.shape[1] // 2:
         t1 -= f0.shape[1]
 
-    im2 = ndimage.shift(im2, [t0, t1])
-
-    # correct parameters for ndimage's internal processing
-    if angle > 0.0:
-        d = int(int(im1.shape[1] / scale) * math.sin(math.radians(angle)))
-        t0, t1 = t1, d + t0
-    elif angle < 0.0:
-        d = int(int(im1.shape[0] / scale) * math.sin(math.radians(angle)))
-        t0, t1 = d + t1, d + t0
-    scale = (im1.shape[1] - 1) / (int(im1.shape[1] / scale) - 1)
+    T = numpy.array([[1., 0., float(t1)], [0., 1., float(t0)]])
+    im2 = cv2.warpAffine(im2 if isinstance(im2, numpy.ndarray) else im2.get(), 
+                         T, (im2.shape[1], im2.shape[0]))
+    im2 = im2 if isinstance(im2, xp.ndarray) else xp.array(im2)
 
     return im2, scale, angle, [-t0, -t1]
 
