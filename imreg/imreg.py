@@ -105,12 +105,24 @@ __all__ = (
 import math
 
 import numpy
-from numpy.fft import fft2, ifft2, fftshift
 
 try:
-    import scipy.ndimage as ndimage
+    import cupy as xp
 except ImportError:
-    import ndimage  # type: ignore
+    import numpy as xp
+
+try:
+    from cupy.fft import fft2, ifft2, fftshift
+except:
+    from numpy.fft import fft2, ifft2, fftshift
+
+try:
+    import cupyx.scipy.ndimage as ndimage
+except ImportError:
+    try:
+        import scipy.ndimage as ndimage
+    except ImportError:
+        import ndimage  # type: ignore
 
 
 def translation(im0, im1):
@@ -119,7 +131,7 @@ def translation(im0, im1):
     f0 = fft2(im0)
     f1 = fft2(im1)
     ir = abs(ifft2((f0 * f1.conjugate()) / (abs(f0) * abs(f1))))
-    t0, t1 = numpy.unravel_index(numpy.argmax(ir), shape)
+    t0, t1 = xp.unravel_index(xp.argmax(ir), shape)
     if t0 > shape[0] // 2:
         t0 -= shape[0]
     if t1 > shape[1] // 2:
@@ -163,13 +175,13 @@ def similarity(im0, im1):
     f1 = fft2(f1)
     r0 = abs(f0) * abs(f1)
     ir = abs(ifft2((f0 * f1.conjugate()) / r0))
-    i0, i1 = numpy.unravel_index(numpy.argmax(ir), ir.shape)
+    i0, i1 = xp.unravel_index(xp.argmax(ir), ir.shape)
     angle = 180.0 * i0 / ir.shape[0]
     scale = log_base**i1
 
     if scale > 1.8:
         ir = abs(ifft2((f1 * f0.conjugate()) / r0))
-        i0, i1 = numpy.unravel_index(numpy.argmax(ir), ir.shape)
+        i0, i1 = xp.unravel_index(xp.argmax(ir), ir.shape)
         angle = -180.0 * i0 / ir.shape[0]
         scale = 1.0 / (log_base**i1)
         if scale > 1.8:
@@ -184,7 +196,7 @@ def similarity(im0, im1):
     im2 = ndimage.rotate(im2, angle)
 
     if im2.shape < im0.shape:
-        t = numpy.zeros_like(im0)
+        t = xp.zeros_like(im0)
         t[: im2.shape[0], : im2.shape[1]] = im2
         im2 = t
     elif im2.shape > im0.shape:
@@ -193,7 +205,7 @@ def similarity(im0, im1):
     f0 = fft2(im0)
     f1 = fft2(im2)
     ir = abs(ifft2((f0 * f1.conjugate()) / (abs(f0) * abs(f1))))
-    t0, t1 = numpy.unravel_index(numpy.argmax(ir), ir.shape)
+    t0, t1 = xp.unravel_index(xp.argmax(ir), ir.shape)
 
     if t0 > f0.shape[0] // 2:
         t0 -= f0.shape[0]
@@ -223,16 +235,17 @@ def similarity_matrix(scale, angle, vector):
     The order of transformations is: scale, rotate, translate.
 
     """
-    S = numpy.diag([scale, scale, 1.0])
-    R = numpy.identity(3)
+    S = xp.diag([scale, scale, 1.0])
+    R = xp.identity(3)
     angle = math.radians(angle)
     R[0, 0] = math.cos(angle)
     R[1, 1] = math.cos(angle)
     R[0, 1] = -math.sin(angle)
     R[1, 0] = math.sin(angle)
-    T = numpy.identity(3)
+    T = xp.identity(3)
     T[:2, 2] = vector
-    return numpy.dot(T, numpy.dot(R, S))
+    res = xp.array(T.get() @ R.get() @ S.get()) if xp.__name__ == "cupy" else T @ R @ S
+    return res
 
 
 def logpolar(image, angles=None, radii=None):
@@ -243,27 +256,27 @@ def logpolar(image, angles=None, radii=None):
         angles = shape[0]
     if radii is None:
         radii = shape[1]
-    theta = numpy.empty((angles, radii), dtype='float64')
-    theta.T[:] = numpy.linspace(0, numpy.pi, angles, endpoint=False) * -1.0
+    theta = xp.empty((angles, radii), dtype='float64')
+    theta.T[:] = xp.linspace(0, xp.pi, angles, endpoint=False) * -1.0
     # d = radii
-    d = numpy.hypot(shape[0] - center[0], shape[1] - center[1])
+    d = xp.hypot(shape[0] - center[0], shape[1] - center[1])
     log_base = 10.0 ** (math.log10(d) / (radii))
-    radius = numpy.empty_like(theta)
+    radius = xp.empty_like(theta)
     radius[:] = (
-        numpy.power(log_base, numpy.arange(radii, dtype='float64')) - 1.0
+        xp.power(log_base, xp.arange(radii, dtype='float64')) - 1.0
     )
-    x = radius * numpy.sin(theta) + center[0]
-    y = radius * numpy.cos(theta) + center[1]
-    output = numpy.empty_like(x)
-    ndimage.map_coordinates(image, [x, y], output=output)
+    x = radius * xp.sin(theta) + center[0]
+    y = radius * xp.cos(theta) + center[1]
+    output = xp.empty_like(x)
+    ndimage.map_coordinates(image, xp.array([x, y]), output=output)
     return output, log_base
 
 
 def highpass(shape):
     """Return highpass filter to be multiplied with fourier transform."""
-    x = numpy.outer(
-        numpy.cos(numpy.linspace(-math.pi / 2.0, math.pi / 2.0, shape[0])),
-        numpy.cos(numpy.linspace(-math.pi / 2.0, math.pi / 2.0, shape[1])),
+    x = xp.outer(
+        xp.cos(xp.linspace(-math.pi / 2.0, math.pi / 2.0, shape[0])),
+        xp.cos(xp.linspace(-math.pi / 2.0, math.pi / 2.0, shape[1])),
     )
     return (1.0 - x) * (2.0 - x)
 
@@ -272,7 +285,7 @@ def imread(fname, norm=True):
     """Return image data from img&hdr uint8 files."""
     with open(fname + '.hdr') as fh:
         hdr = fh.readlines()
-    img = numpy.fromfile(fname + '.img', numpy.uint8, -1)
+    img = xp.fromfile(fname + '.img', xp.uint8, -1)
     img.shape = int(hdr[4].split()[-1]), int(hdr[3].split()[-1])
     if norm:
         img = img.astype('float64')
