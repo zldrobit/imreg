@@ -244,9 +244,7 @@ def similarity_matrix(scale, angle, vector):
     R[1, 0] = math.sin(angle)
     T = xp.identity(3)
     T[:2, 2] = vector
-    res = xp.array(T.get() @ R.get() @ S.get()) if xp.__name__ == "cupy" else T @ R @ S
-    return res
-
+    return T @ R @ S
 
 def logpolar(image, angles=None, radii=None):
     """Return log-polar transformed image and log base."""
