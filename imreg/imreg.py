@@ -163,11 +163,11 @@ def similarity(im0, im1, retained_angle=60, window='hanning'):
 
     if window == 'hanning':
         shape = im0.shape
-		hanning1d_y = xp.hanning(shape[0])
-		hanning1d_x = xp.hanning(shape[1])
-		hanning = xp.sqrt(xp.outer(hanning1d_y, hanning1d_x))
-		im0 = im0 * hanning
-		im1 = im1 * hanning
+        hanning1d_y = xp.hanning(shape[0])
+        hanning1d_x = xp.hanning(shape[1])
+        hanning = xp.sqrt(xp.outer(hanning1d_y, hanning1d_x))
+        im0 = im0 * hanning
+        im1 = im1 * hanning
 
     f0 = fftshift(abs(fft2(im0)))
     f1 = fftshift(abs(fft2(im1)))
