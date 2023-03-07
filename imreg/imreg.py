@@ -140,7 +140,7 @@ def translation(im0, im1):
     return [t0, t1]
 
 
-def similarity(im0, im1, retained_angle=60):
+def similarity(im0, im1, retained_angle=60, window='hanning'):
     """Return similarity transformed image im1 and transformation parameters.
 
     Transformation parameters are: isotropic scale factor, rotation angle (in
@@ -160,6 +160,14 @@ def similarity(im0, im1, retained_angle=60):
         raise ValueError('images must have same shapes')
     if len(im0.shape) != 2:
         raise ValueError('images must be 2 dimensional')
+
+    if window == 'hanning':
+        shape = im0.shape
+		hanning1d_y = xp.hanning(shape[0])
+		hanning1d_x = xp.hanning(shape[1])
+		hanning = xp.sqrt(xp.outer(hanning1d_y, hanning1d_x))
+		im0 = im0 * hanning
+		im1 = im1 * hanning
 
     f0 = fftshift(abs(fft2(im0)))
     f1 = fftshift(abs(fft2(im1)))
